@@ -1,0 +1,616 @@
+
+#include"stdio.h"
+#include"time.h"
+#include"math.h"
+#include"stdlib.h"
+#define S 1024
+#define X 1024
+#define Y 1024
+
+    int main()
+    {
+        int sum = 0,i,j,k;
+        int **A; //declared A[X][S]
+        int **B; //declare B[S][Y]
+        int **C; //resultant matrix become C[X][Y]
+        struct timespec start,stop;
+        double t1=0,t2=0,result=0;
+  
+  /*----------------------------------------------------*/
+ //create array of pointers(Rows)
+         A =(int **) malloc(X*sizeof(int*));
+         B =(int **)malloc(S*sizeof(int*));
+         C=(int **)malloc(X*sizeof(int*));
+  /*----------------------------------------------------*/
+  
+  /*--------------------------------------------------------------------------------*/
+ //allocate memory for each Row pointer
+         for(i=0; i < X; i++)
+        {
+            A[i]=(int *)malloc(S*sizeof(int));
+            C[i]=(int *)malloc(Y*sizeof(int));
+        }
+  
+        for(i = 0; i < S; i++)
+        B[i]=(int *)malloc(Y*sizeof(int));
+  /*--------------------------------------------------------------------------------*/
+  
+        for(i = 0; i < X; i++)
+        {
+         for(j = 0; j < S; j++)
+        {
+          A[i][j] = 1; 
+        }
+        }
+ 
+         for(i = 0; i < S; i++)
+     {
+          for(j = 0; j < Y; j++)
+    {
+        B[i][j] = 2;
+    }
+    }
+ //------------------calculate Starting time----------------------
+        clock_gettime(CLOCK_REALTIME,&start);
+        t1 = start.tv_sec + (start.tv_nsec/pow(10,9));
+ //--------------------------------------------------------------
+ 
+         for(i = 0; i < X; i++)
+    {
+        for(j = 0; j < Y;j++)
+    {
+        sum=0;
+        for(k = 0; k < S; k++)
+    {
+         sum = sum + A[i][k] * B[k][j];
+    }
+        C[i][j] = sum;
+   }
+   }
+ //---------------calculate End time-------------------------
+         clock_gettime(CLOCK_REALTIME,&stop);
+        t2 = stop.tv_sec + (stop.tv_nsec/pow(10,9));
+ //--------------------------------------------------------------
+ // result = End_time - Start_time
+
+        result = t2 - t1;
+        for(i = 0; i < 2; i++)
+    {
+         for(j = 0; j < 10; j++)
+    {
+        printf("%d\t",C[i][j]);
+    }
+        printf("\n");
+    }
+        printf("\ntime taken =\t %lf\n",result);
+        return 0;
+    }
+#include <stdlib.h>
+#include <stdio.h>
+#include <sys/time.h>
+#include <iostream>
+
+using namespace std;
+
+
+const int dimension = 1024;
+const int blocksize = 32;
+const int K = 1;
+
+
+struct timeval tv;
+
+__global__ void gpuMM(float *A, float *B, float *C, int N)
+{
+        // Matrix multiplication for NxN matrices C=A*B
+        // Each thread computes a single element of C
+        int row = blockIdx.y*blockDim.y + threadIdx.y;
+        int col = blockIdx.x*blockDim.x + threadIdx.x;
+
+        float sum = 0.0;
+        for (int n = 0; n < N; ++n)
+            sum += A[row*N+n]*B[n*N+col];
+
+        C[row*N+col] = sum;
+
+//	if(row%50 ==5)
+//		printf("%f \t %f \t %f\n",A[row*N+col], B[row*N+col], C[row*N+col]);
+
+}
+
+
+int main(int argc, char *argv[])
+{
+                cudaEvent_t start1, stop1;
+                float time;
+
+                cudaEventCreate(&start1);
+                cudaEventCreate(&stop1);
+
+                int i, j;
+	        float *A, *B, *C;// start, end;
+                float *Ad, *Bd, *Cd;
+
+        A = (float*)malloc(dimension*dimension*sizeof(float));
+        B = (float*)malloc(dimension*dimension*sizeof(float));
+        C = (float*)malloc(dimension*dimension*sizeof(float));
+
+        srand(292);
+
+        for(i = 0; i < dimension; i++)
+                for(j = 0; j < dimension; j++)
+                {
+                        A[dimension*i+j] = 1;
+                        B[dimension*i+j] = 2;
+                        C[dimension*i+j] = 0.0;
+                }
+
+                cudaMalloc( (void**)&Ad, dimension*dimension*sizeof(float) );
+                cudaMemcpy( Ad, A, dimension*dimension*sizeof(float), cudaMemcpyHostToDevice );
+
+                cudaMalloc( (void**)&Bd, dimension*dimension*sizeof(float) );
+                cudaMemcpy( Bd, B, dimension*dimension*sizeof(float), cudaMemcpyHostToDevice );
+
+                cudaMalloc( (void**)&Cd, dimension*dimension*sizeof(float) );
+
+                dim3 threadBlock(blocksize,blocksize);
+                dim3 grid(K,K);
+
+                cudaEventRecord( start1, 0 );
+
+                gpuMM<<<grid,threadBlock>>>( Ad,Bd,Cd,dimension);
+
+                cudaEventRecord( stop1, 0 );
+                cudaEventSynchronize( stop1 );
+
+                cudaEventElapsedTime( &time, start1, stop1 );
+                cudaMemcpy( C, Cd, dimension*dimension*sizeof(float), cudaMemcpyDeviceToHost );
+
+
+        for(i = 0; i < 20; i++)
+	    {
+        	{
+        		printf("%f   ",C[i]);
+    		}
+		if(i%10 ==9)
+        	    printf("\n");
+	    }
+
+
+
+                printf("\ntime taken:%f  sec\n", time);
+                cudaEventDestroy( start1 );
+                cudaEventDestroy( stop1 );
+
+//                cudaMemcpy(C,Cd,dimension*dimension*sizeof(float),cudaMemcpyDeviceToHost);
+
+        free(A);
+        free(B);
+        free(C);
+        cudaFree(Ad);
+        cudaFree(Bd);
+        cudaFree(Cd);
+
+        return 0;
+}
+
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <sys/time.h>
+
+/* change dimension size as needed */
+const int dimension = 1024 ;
+const int blocksize = 20;
+const int K = 16;
+
+__global__ void gpuMM(float *A, float *B, float *C,int N)
+{
+	
+	int row = blockIdx.y*blockDim.y + threadIdx.y;
+	int col = blockIdx.x*blockDim.x + threadIdx.x;
+
+	float sum = 0;
+	for (int n = 0; n < N; ++n)
+	    sum =sum+ A[row*N+n]*B[n*N+col];
+
+	C[row*N+col] = sum;
+	for (int n = 0; n < N; ++n)
+	printf("%d\t",C[row*dimension+col]);
+}
+
+
+int main(int argc, char *argv[])
+{
+		cudaEvent_t start1, stop1;
+		float time;
+
+		cudaEventCreate(&start1);
+		cudaEventCreate(&stop1);
+        
+		int i, j;
+        float *A, *B, *C;// start, end;
+		float *Ad, *Bd, *Cd;
+
+        A = (float*)malloc(dimension*dimension*sizeof(float));
+        B = (float*)malloc(dimension*dimension*sizeof(float));
+        C = (float*)malloc(dimension*dimension*sizeof(float));		
+		
+        srand(292);
+
+        for(i = 0; i < dimension; i++)
+                for(j = 0; j < dimension; j++)
+                {   
+                        A[dimension*i+j] = 1;
+                        B[dimension*i+j] = 2;
+                       // C[dimension*i+j] = 0.0;
+                }   
+				
+		cudaMalloc( (void**)&Ad, dimension*dimension*sizeof(float) );
+		cudaMemcpy( Ad, A, dimension*dimension*sizeof(float), cudaMemcpyDefault );
+
+		cudaMalloc( (void**)&Bd, dimension*dimension*sizeof(float) );
+		cudaMemcpy( Bd, B, dimension*dimension*sizeof(float), cudaMemcpyDefault );
+		
+		cudaMalloc( (void**)&Cd, dimension*dimension*sizeof(float) );
+
+		dim3 threadBlock(blocksize,blocksize);
+		dim3 grid(K,K);
+		
+        //start = timestamp();
+		cudaEventRecord( start1, 0 );
+
+		gpuMM<<<grid,threadBlock>>>( Ad,Bd,Cd,dimension);
+		cudaMemcpy( Cd, C, dimension*dimension*sizeof(float), cudaMemcpyDefault );
+
+        //end = timestamp();
+
+		cudaEventRecord( stop1, 0 );
+		cudaEventSynchronize( stop1 );
+		
+		cudaEventElapsedTime( &time, start1, stop1 );
+		
+		//print(C,N);
+		printf("\nTime to calculate results on GPU: %f ms.\n", time);
+		cudaEventDestroy( start1 );
+		cudaEventDestroy( stop1 );
+        
+
+        free(A);
+        free(B);
+        free(C);
+		cudaFree(Ad);
+		cudaFree(Bd);
+		cudaFree(Cd);
+
+        return 0;
+}
+// Matrix addition program gpu.cu  Matrix multiplication
+
+#include <stdio.h>
+#include <cuda.h>
+#include <stdlib.h>
+
+__global__ void gpu_matrixmult(int *gpu_a, int *gpu_b, int *gpu_c, int N) {
+
+	int k, sum = 0;
+	int col = threadIdx.x + blockDim.x * blockIdx.x; 
+	int row = threadIdx.y + blockDim.y * blockIdx.y;
+
+       if(col < N && row < N) {
+		for(k = 0; k < N; k++) 
+          		sum += gpu_a[row * N + k] * gpu_b[k * N + col];
+		gpu_c[row * N + col] = sum;
+	}
+}
+
+void cpu_matrixmult(int *cpu_a, int *cpu_b, int *cpu_c, int N) {
+
+	int row, col, k, sum;
+
+	for(row=0; row < N; row++)   					// row of a
+	  for(col=0; col < N; col++) {					// column of b
+		sum = 0;
+		for(k = 0; k < N; k++) 
+          		sum += cpu_a[row * N + k] * cpu_b[k * N + col];
+		cpu_c[row * N + col] = sum;
+	  }
+}
+
+void printArray(int *h, int N) {
+
+	printf("Array of numbers:\n");
+
+	for (int row = 0; row < 1; row ++)
+	{
+	  for (int col = 1; col < 10; col ++) 
+	 	printf("%6d  ", h[col + row * N]);
+	  printf("\n");
+	}
+	for (int row = 1; row < 2; row ++)
+	{
+	  for (int col = 10; col < 20; col ++) 
+	 	printf("%6d  ", h[col + row * N]);
+	  printf("\n");
+	}
+}
+
+void loadArrays(int *a, int *b, int N) {
+
+	int row, col;
+
+	srand(1);					// for repeatability
+	for(row=0; row < N; row++)			// load arrays with some numbers
+	   for(col=0; col < N; col++) {
+		a[row * N + col] = rand() % 10;
+		b[row * N + col] = rand() % 10;
+	}
+}
+
+int main(int argc, char *argv[])  {
+
+	char key;
+	int i; 					// loop counter
+
+	int Grid_Dim_x=1, Grid_Dim_y=1;	//Grid structure values
+	int Block_Dim_x=1, Block_Dim_y=1;	//Block structure values
+
+	int noThreads_x, noThreads_y;		// number of threads available in device, each dimension
+	int noThreads_block;				// number of threads in a block
+
+	int N = 1024;  				// size of array in each dimension
+	int *a,*b,*c,*d;
+	int *dev_a, *dev_b, *dev_c;
+	int size;					// number of bytes in arrays
+
+	cudaEvent_t start, stop;     		// using cuda events to measure time
+	float elapsed_time_ms1, elapsed_time_ms3;
+
+/* --------------------ENTER INPUT PARAMETERS AND DATA -----------------------*/
+
+do {  // loop to repeat complete program	
+
+	printf ("Device characteristics -- some limitations (compute capability 2.x)\n");
+	printf ("		Maximum number of threads per block = 1024\n");
+	printf ("		Maximum sizes of x- and y- dimension of thread block = 1024\n");
+	printf ("		Maximum size of each dimension of grid of thread blocks = 65535\n");
+	
+	printf("Enter size of array in one dimension (square array), currently %d\n",N);
+	scanf("%d",&N);
+	
+	do {
+		printf("Enter nuumber of blocks per grid in x and y dimensions, currently %d  : ",Grid_Dim_x);
+		scanf("%d",&Grid_Dim_x);
+
+		Grid_Dim_y = Grid_Dim_x;  // square grid
+
+		printf("Enter nuumber of threads per block in x and y dimensions, currently %d (max 32): ",Block_Dim_x);
+		scanf("%d",&Block_Dim_x);
+
+		Block_Dim_y = Block_Dim_x;	//square blocks
+
+		noThreads_x = Grid_Dim_x * Block_Dim_x;		// total number of threads in x dimension
+		noThreads_y = Grid_Dim_y * Block_Dim_y;		// total number of threads in y dimension
+		
+		noThreads_block = Block_Dim_x * Block_Dim_y;	// number of threads in a block
+
+		if (noThreads_x < N) printf("Error -- number of threads in x/y dimensions less than number of elements in arrays, try again\n");
+		else if (noThreads_block > 1024) printf("Error -- too many threads in block, try again\n");
+		else printf("Number of threads not used = %d\n", noThreads_x * noThreads_y - N * N);
+
+	} while (noThreads_x < N || noThreads_block > 1024);
+
+	dim3 Grid(Grid_Dim_x, Grid_Dim_x);		//Grid structure
+	dim3 Block(Block_Dim_x,Block_Dim_y);	//Block structure, threads/block limited by specific device
+
+/* ---------------- ALLOCATE MEMORY AND LOAD -------------------- */
+
+	size = N * N * sizeof(int);		// number of bytes in total in arrays
+
+	//a = (int*) malloc(size);		//this time use dynamically allocated memory for arrays on host
+	//b = (int*) malloc(size);
+	//c = (int*) malloc(size);		// results from GPU
+	//d = (int*) malloc(size);		// results from CPU
+	
+	
+	cudaHostAlloc( (void**)&a, size, cudaHostAllocMapped || cudaHostAllocWriteCombined );
+	cudaHostAlloc( (void**)&b, size, cudaHostAllocMapped || cudaHostAllocWriteCombined );		
+	cudaHostAlloc( (void**)&c, size, cudaHostAllocMapped );
+	cudaHostAlloc( (void**)&d, size, cudaHostAllocMapped );
+
+	//cudaMalloc((void**)&dev_a, size);	// allocate memory on device
+	//cudaMalloc((void**)&dev_b, size);
+	//cudaMalloc((void**)&dev_c, size);
+	
+	cudaHostGetDevicePointer(&dev_a, a, 0); // mem. copy to device not need now, but ptrs needed instead
+	cudaHostGetDevicePointer(&dev_b, b, 0);
+	cudaHostGetDevicePointer(&dev_c ,c, 0);
+
+
+	loadArrays(a,b,N);			// load arrays with numbers
+	
+	//printf("Array A\n"); printArray(a, N); 
+	//printf("Array B\n"); printArray(b, N);
+	
+
+
+/* ------------- COMPUTATION DONE ON GPU ----------------------------*/
+
+	cudaMemcpy(dev_a, a , size ,cudaMemcpyHostToDevice);
+	cudaMemcpy(dev_b, b , size ,cudaMemcpyHostToDevice);
+	
+	cudaEventCreate(&start);     		// instrument code to measure start time
+	cudaEventCreate(&stop);
+
+	cudaEventRecord(start, 0);
+//	cudaEventSynchronize(start);  	// Needed?
+
+	gpu_matrixmult<<<Grid,Block>>>(dev_a,dev_b,dev_c,N);
+
+	cudaMemcpy(c,dev_c, size ,cudaMemcpyDeviceToHost);
+	cudaThreadSynchronize();
+
+	cudaEventRecord(stop, 0);     	// instrument code to measue end time
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&elapsed_time_ms1, start, stop );
+	
+	printf("Time to calculate results on GPU: %f ms.\n", elapsed_time_ms1);  // print out execution time
+
+/* ------------- COMPUTATION DONE ON HOST CPU ----------------------------*/
+
+	cudaEventRecord(start, 0);		// use same timing, seems necessary to do CPU after GPU otherwise time=0?
+//	cudaEventSynchronize(start);  	// Needed? Put outside timing loop
+
+	cpu_matrixmult(a,b,d,N);		// do calculation on host
+
+	cudaEventRecord(stop, 0);     	// instrument code to measue end time
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&elapsed_time_ms3, start, stop );
+
+	printf("Time to calculate results on CPU: %f ms.\n", elapsed_time_ms3);  // print out execution time
+
+/* ------------------- check device creates correct results -----------------*/
+
+	printf("\nArray C, as computed on CPU\n"); printArray(d, N); 
+	printf("Checking all results the same\n");
+
+	for(i=0;i < N*N;i++) {
+		if (c[i] != d[i] ) { 
+			printf("*********** ERROR in results, CPU and GPU create different answers ********\n");
+			break;
+		}
+	}
+/*--------------------------SPEEDUP ---------------------------------*/
+
+	printf("Speedup on GPU compared to CPU= %f\n", (float) elapsed_time_ms3 / (float) elapsed_time_ms1); 
+	
+	printf("\nEnter c to repeat, return to terminate\n");
+	scanf("%c",&key);
+	scanf("%c",&key);
+
+} while (key == 'c'); // loop of complete program
+
+/* --------------  clean up  ---------------------------------------*/
+	free(a);
+	free(b);
+	free(c);
+	//cudaFree(dev_a);
+	//cudaFree(dev_b);
+	//cudaFree(dev_c);
+
+	//cudaEventDestroy(start);
+	//cudaEventDestroy(stop);
+	cudaFreeHost(a); 		// clean up
+	cudaFreeHost(b);
+	cudaFreeHost(c);
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
+
+
+	return 0;
+}
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <cuda.h>
+
+#define BlockSize 16 			// Size of blocks, 16 x 16 threads, fixed
+
+__global__ void gpu_Comput (int *h, int N, int T) {
+
+// Array loaded with global thread ID that acesses that location
+
+	int col = threadIdx.x + blockDim.x * blockIdx.x; 
+	int row = threadIdx.y + blockDim.y * blockIdx.y;
+
+	int threadID = col + row * N;
+	int index = row + col * N;		// sequentially down each row
+
+	for (int t = 0; t < T; t++)		// loop to repeat to reduce other time effects
+	   h[index] = threadID;  		// load array with flattened global thread ID
+}
+
+void printArray(int *h, int N) {
+
+	printf("Results of computation, every N/8 numbers, eight numbers\n");
+
+	for (int row = 0; row < N; row += N/8) {
+	  for (int col = 0; col < N; col += N/8) 
+	 	printf("%6d  ", h[col + row * N]);
+	  printf("\n"); 
+	}
+}
+
+int main(int argc, char *argv[])  {
+
+	int T = 100;				 // number of iterations, entered at keyboard
+	int B = 1;				 // number of blocks, entered at keyboard
+	char key;
+
+	int *h, *dev_h;			// ptr to array holding numbers on host and device
+
+	cudaEvent_t start, stop;     	// cuda events to measure time
+	float elapsed_time_ms1;
+	cudaEventCreate( &start ); 
+	cudaEventCreate( &stop );
+
+/* ------------------------- Keyboard input -----------------------------------*/
+
+do {  // loop to repeat complete program	
+
+	printf("Grid Structure 2-D grid, 2-D blocks\n");
+	printf("Blocks fixed at 16 x 16 threads, 512 threads, max for compute cap. 1.x \n");
+	printf("Enter number of blocks in grid, each dimension, currently %d\n",B);
+	scanf("%d",&B);
+	printf("Enter number of iterations, currently %d\n",T);
+	scanf("%d",&T);
+
+	int N = B * BlockSize;			// size of data array, given input data
+
+	printf("Array size (and total grid-block size) %d x %d\n", N, N);
+
+	dim3 Block(BlockSize, BlockSize);		//Block structure, 32 x 32 max
+	dim3 Grid(B, B);				//Grid structure, B x B	
+
+/* ------------------------- Allocate Memory-----------------------------------*/
+
+	int size = N * N * sizeof(int);		// number of bytes in total in array
+	h = (int*) malloc(size);			// Array on host
+	cudaMalloc((void**)&dev_h, size);		// allocate device memory
+
+/* ------------------------- GPU Computation -----------------------------------*/
+			
+	cudaEventRecord( start, 0 );
+	
+	gpu_Comput<<< Grid, Block >>>(dev_h, N, T);
+	
+	cudaEventRecord( stop, 0 );     		// instrument code to measue end time
+	cudaEventSynchronize( stop );		// wait for all work done by threads
+	cudaEventElapsedTime( &elapsed_time_ms1, start, stop );
+
+	cudaMemcpy(h,dev_h, size ,cudaMemcpyDeviceToHost);  //Get results to check
+
+	printArray(h,N);
+	printf("\nTime to calculate results on GPU: %f ms.\n", elapsed_time_ms1);
+/* ---------- INSERT CALL TIO SECOND KERNEL HERE -------------------------------------*/
+
+
+/* -------------------------REPEAT PROGRAM INPUT-----------------------------------*/
+
+	printf("\nEnter c to repeat, return to terminate\n");
+
+	scanf("%c",&key);
+	scanf("%c",&key);
+
+} while (key == 'c'); // loop of complete program
+ 
+/* --------------  clean up  ---------------------------------------*/
+	
+	free(h);
+	cudaFree(dev_h);	
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
+  
+	return 0;
+}
+
